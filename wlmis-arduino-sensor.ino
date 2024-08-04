@@ -1,19 +1,15 @@
 #include <RGBLed.h>
 #include <SPI.h>
-#include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#include <TimerOne.h>
+#include <MD_MAX72xx.h>
 
 // RGB LED
 #define RED_PIN A0
 #define GREEN_PIN A1
 #define BLUE_PIN A2
 RGBLed ledRGB(RED_PIN, GREEN_PIN, BLUE_PIN, RGBLed::COMMON_ANODE);
-
-// RFID
-#define RST_PIN 9
-#define SS_PIN 10
-MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 // LCD
 #define I2C_ADDR 0x27
@@ -22,8 +18,18 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);
 LiquidCrystal_I2C lcd(I2C_ADDR, LCD_COLS, LCD_ROWS);
 
 // Ultrasonic sensor
-#define TRIGGER_PIN 5
-#define ECHO_PIN 6
+#define TRIGGER_PIN 7
+#define ECHO_PIN 8
+
+// 8x8 Matrix
+#define HARDWARE_TYPE MD_MAX72XX::ICSTATION_HW
+#define MAX_DEVICES 1
+#define DIN_PIN 4
+#define CLK_PIN 5
+#define CS_PIN 6
+
+MD_MAX72XX leds = MD_MAX72XX(HARDWARE_TYPE, DIN_PIN, CLK_PIN, CS_PIN, MAX_DEVICES);
+int rowsToLight = 0;
 
 // Water monitor struct
 struct WaterLevel
@@ -44,11 +50,10 @@ float heightCm;
 // State machine
 enum State
 {
-    IDLE,
     MONITORING
 };
 
-State state = IDLE;
+State state = MONITORING;
 
 const byte rfidAuthorizedCard[4] = {0x00, 0x00, 0x00, 0x00};
 byte rfidReadCard[4];
@@ -67,25 +72,23 @@ void setup()
     // Ultrasonic sensor
     pinMode(TRIGGER_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
+
+    // Timer 1 for json
+    Timer1.initialize(1000000);
+    Timer1.attachInterrupt(timerIsr);
+
+    // Matrix
+    leds.begin();
 }
 
 void loop()
 {
     switch (state)
     {
-    case IDLE:
-        waitForRfid();
-        break;
     case MONITORING:
         collectData();
         break;
     }
-}
-
-void waitForRfid()
-{
-    ledRGB.off();
-    state = MONITORING;
 }
 
 void readRfid()
@@ -104,6 +107,8 @@ void readRfid()
     {
         rfidReadCard[i] = mfrc522.uid.uidByte[i];
     }
+
+    mfrc522.PICC_HaltA();
 
     if (isArrayEqual(rfidReadCard, rfidAuthorizedCard))
     {
@@ -146,9 +151,8 @@ bool isArrayEqual(const byte array1[], const byte array2[])
 void collectData()
 {
     measureHeight();
-    // TODO: Update LCD
-    // TODO: Add 8x8 led matrix
-    // TODO: Timer 1 for 500ms to send the json data in Serial
+    printLcd("Nivel de agua:", "" + String(waterLevel.heightCm, 2) + "cm");
+    updateMatrix();
     readRfid();
 }
 
@@ -190,4 +194,23 @@ void printLcd(String topMessage, String bottomMessage)
     lcd.print(topMessage);
     lcd.setCursor(0, 1);
     lcd.print(bottomMessage);
+}
+
+void timerIsr()
+{
+    SendJsonDataSerial();
+}
+
+void updateMatrix()
+{
+    rowsToLight = round(waterLevel.percent * 8);
+    leds.clear();
+    for (int i = 0; i < rowsToLight; ++i)
+    {
+        for (int j = 0; j < 8; ++j)
+        {
+            leds.setPoint(i, j, true);
+        }
+    }
+    leds.update();
 }
