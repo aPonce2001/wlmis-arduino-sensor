@@ -1,5 +1,6 @@
 #include <RGBLed.h>
 #include <SPI.h>
+#include <MFRC522.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <TimerOne.h>
@@ -10,6 +11,11 @@
 #define GREEN_PIN A1
 #define BLUE_PIN A2
 RGBLed ledRGB(RED_PIN, GREEN_PIN, BLUE_PIN, RGBLed::COMMON_ANODE);
+
+// RFID
+#define RST_PIN 9
+#define SS_PIN 10
+MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 // LCD
 #define I2C_ADDR 0x27
@@ -50,12 +56,13 @@ float heightCm;
 // State machine
 enum State
 {
+    IDLE,
     MONITORING
 };
 
-State state = MONITORING;
+State state = IDLE;
 
-const byte rfidAuthorizedCard[4] = {0x00, 0x00, 0x00, 0x00};
+const byte rfidAuthorizedCard[4] = {0x53, 0xE2, 0xC9, 0x0D};
 byte rfidReadCard[4];
 
 void setup()
@@ -85,10 +92,19 @@ void loop()
 {
     switch (state)
     {
+    case IDLE:
+        waitForRfid();
+        break;
     case MONITORING:
         collectData();
         break;
     }
+}
+
+void waitForRfid()
+{
+    ledRGB.off();
+    state = MONITORING;
 }
 
 void readRfid()
