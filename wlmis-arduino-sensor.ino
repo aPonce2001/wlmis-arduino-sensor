@@ -46,8 +46,8 @@ struct WaterLevel
 };
 
 // Water monitor constants
-const float RECIPIENT_HEIGHT_CM = 100.0f;
-const float RECIPIENT_AREA_CM2 = 100.0f;
+const float RECIPIENT_HEIGHT_CM = 10.0f;
+const float RECIPIENT_AREA_CM2 = 4.0f;
 
 // Water monitor record
 WaterLevel waterLevel = {0.0f, 0.0f, 0.0f};
@@ -83,9 +83,13 @@ void setup()
     // Timer 1 for json
     Timer1.initialize(1000000);
     Timer1.attachInterrupt(timerIsr);
+    Timer1.stop();
 
     // Matrix
     leds.begin();
+
+    printLcd("Ingrese tag RFID", "");
+    ledRGB.off();
 }
 
 void loop()
@@ -103,8 +107,7 @@ void loop()
 
 void waitForRfid()
 {
-    ledRGB.off();
-    state = MONITORING;
+    readRfid();
 }
 
 void readRfid()
@@ -134,9 +137,11 @@ void readRfid()
 
         if (state == MONITORING)
         {
+            Timer1.stop();
             state = IDLE;
             return;
         }
+        Timer1.start();
 
         state = MONITORING;
     }
@@ -183,6 +188,7 @@ void measureHeight()
     float distance = 0.017f * duration;
     heightCm = distance;
     recordData(heightCm);
+    delay(500);
 }
 
 void recordData(float distance)
@@ -221,9 +227,9 @@ void updateMatrix()
 {
     rowsToLight = round(waterLevel.percent * 8);
     leds.clear();
-    for (int i = 0; i < rowsToLight; ++i)
+    for (int i = 0; i < 8; ++i)
     {
-        for (int j = 0; j < 8; ++j)
+        for (int j = 0; j < rowsToLight; ++j)
         {
             leds.setPoint(i, j, true);
         }
